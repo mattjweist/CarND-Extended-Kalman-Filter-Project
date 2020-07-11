@@ -3,13 +3,7 @@
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 
-/* 
- * Please note that the Eigen library does not initialize 
- *   VectorXd or MatrixXd objects with zeros upon creation.
- */
-
 KalmanFilter::KalmanFilter() {}
-
 KalmanFilter::~KalmanFilter() {}
 
 void KalmanFilter::Init(VectorXd &x_in, MatrixXd &P_in, MatrixXd &F_in,
@@ -23,19 +17,49 @@ void KalmanFilter::Init(VectorXd &x_in, MatrixXd &P_in, MatrixXd &F_in,
 }
 
 void KalmanFilter::Predict() {
-  /**
-   * TODO: predict the state
-   */
+  // Predict from Lidar
+  x_ = F_ * x_;
+  MatrixXd Ft = F_.transpose();
+  P_ = F_ * P_ * Ft + Q_;
 }
 
 void KalmanFilter::Update(const VectorXd &z) {
-  /**
-   * TODO: update the state by using Kalman Filter equations
-   */
+  // Update Lidar
+  VectorXd z_pred = H_ * x_;
+  VectorXd y = z - z_pred;
+  
+  UpdateEither(y);
 }
 
 void KalmanFilter::UpdateEKF(const VectorXd &z) {
-  /**
-   * TODO: update the state by using Extended Kalman Filter equations
-   */
+  // Update Radar
+  VectorXd hx(3);
+  hx << sqrt(x_(0)*x_(0)+  x_(1)*x_(1)),
+  		atan2(x_(1),x_(0)),
+  		(x_(0)*x_(2) + x_(1)*x_(3))/sqrt(x_(0)*x_(0)+  x_(1)*x_(1));
+  VectorXd y = z - hx;
+  // ensure angle is between -pi and pi
+  while(y(1)<-M_PI || y(1) > M_PI) {
+    if(y(1)<-M_PI){
+      y(1)+=2*M_PI;
+    }
+    else {
+      y(1)-=2*M_PI;
+    }
+  }
+  
+  UpdateEither(y);
+}
+  
+void KalmanFilter::UpdateEither(const VectorXd &y) {
+  MatrixXd Ht = H_.transpose();
+  MatrixXd S = H_ * P_ * Ht + R_;
+  MatrixXd Si = S.inverse();
+  MatrixXd PHt = P_ * Ht;
+  MatrixXd K = PHt * Si;
+
+  // New Estimate from Radar
+  x_ = x_ + (K * y);
+  MatrixXd I = MatrixXd::Identity(4, 4);
+  P_ = (I - K * H_) * P_;
 }
